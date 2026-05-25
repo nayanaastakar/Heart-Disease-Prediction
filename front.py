@@ -1,5 +1,8 @@
 import streamlit as st
+import pandas as pd
 import numpy as np
+import joblib
+from pathlib import Path
 
 # --------------------------------------------------
 # Page Configuration (remove default header effect)
@@ -10,6 +13,15 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+MODEL_PATH = Path(__file__).resolve().parent / 'heart_rf_model.pkl'
+model = None
+
+if MODEL_PATH.exists():
+    try:
+        model = joblib.load(MODEL_PATH)
+    except Exception as exc:
+        st.error(f"Unable to load trained model: {exc}")
 
 # --------------------------------------------------
 # HARD OVERRIDE STREAMLIT DEFAULT HEADER
@@ -214,26 +226,41 @@ with left:
             help="Number of major blood vessels with blockage."
         )
 
-    # Encode
-    sex = 1 if sex == "Male" else 0
-    fbs = 1 if fbs == "Yes" else 0
-    exang = 1 if exang == "Yes" else 0
+    sex_code = 1 if sex == "Male" else 0
+    fbs_code = 1 if fbs == "Yes" else 0
+    exang_code = 1 if exang == "Yes" else 0
 
     if st.button("🔍 Predict Risk"):
-        score = (age > 55) + (chol > 240) + (trestbps > 140) + fbs + exang
-        probability = min(score * 0.15, 0.95)
-        percentage = round(probability * 100, 2)
-
-        if probability > 0.5:
-            st.markdown(
-                f"<div class='result-high'>⚠️ High Risk of Heart Disease<br><b>Estimated Risk:</b> {percentage}%</div>",
-                unsafe_allow_html=True
+        if model is None:
+            st.error(
+                "Trained model not found. Run `python back.py` first to generate heart_rf_model.pkl."
             )
         else:
-            st.markdown(
-                f"<div class='result-low'>✅ Low Risk of Heart Disease<br><b>Estimated Risk:</b> {percentage}%</div>",
-                unsafe_allow_html=True
-            )
+            input_data = pd.DataFrame([
+                {
+                    'age': age,
+                    'sex': sex_code,
+                    'trestbps': trestbps,
+                    'chol': chol,
+                    'fbs': fbs_code,
+                    'exang': exang_code,
+                    'oldpeak': oldpeak,
+                    'ca': ca,
+                }
+            ])
+            probability = model.predict_proba(input_data)[0][1]
+            percentage = round(probability * 100, 2)
+
+            if probability > 0.5:
+                st.markdown(
+                    f"<div class='result-high'>⚠️ High Risk of Heart Disease<br><b>Estimated Risk:</b> {percentage}%</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"<div class='result-low'>✅ Low Risk of Heart Disease<br><b>Estimated Risk:</b> {percentage}%</div>",
+                    unsafe_allow_html=True
+                )
 
     st.markdown('</div>', unsafe_allow_html=True)
 
